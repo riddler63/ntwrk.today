@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Конфигурация оборудования Huawei BNG"
-tags: bng BNG huawei edsg nat
+tags: BNG huawei edsg
 author: "riddler63"
 ---
 
@@ -21,21 +21,23 @@ User-group создается в system-view.
 
 Enhanced dynamic service gateway выполняет следующие функции на основе сервис групп (service-group) назначенных на абонентскую сессию пользователя.
 
+Основные функции EDSG:
+
 1. Accounting на основе адреса назначения и тарифного плана
 2. Ограничение скорости на основе адреса назначения
 3. Применение ограничения по времени для действия сервиса и задание его приоритета
 
-EDSG обрабатывает трафик абонентской сессии на основе UCL где в качестве source и destination может быть задана service-group. До 8 таких сервисов может быть назначено на абонентскую сессию, но, как правило, хватает 3-4. Сервиса так же можно задать time-range и делать accounting отдельно при это в Accounting сообщениях будет указание на мастер сессию.
+EDSG обрабатывает трафик абонентской сессии на основе UCL где в качестве source и destination может быть задана service-group. До 8 таких сервисов может быть назначено на абонентскую сессию, но как правило хватает 3-4. Сервису так же можно задать time-range и делать accounting отдельно от мастер сессии, при этом в Accounting сообщениях будет указана мастер сессию.
 
-Правила обработки трафика по service-group приоритетнее, чем по user-group и по умолчанию BNG не производит обработку по user-group если на абонентскую сессию назначена service-group и трафик проматчился одним из EDSG сервисов. Данное поведение может быть изменено командой.
+Правила обработки трафика по service-group приоритетнее, чем по user-group и по умолчанию BNG не производит обработку трафика по user-group если на абонентскую сессию назначена service-group и трафик проматчился одним из EDSG сервисов. Данное поведение может быть изменено командой `traffic match user-group [ inbound | outbound ]`
 
-Так же, по умолчанию ограничение по скорости EDSG сервиса добавляется к ограничению по скорости мастер сессии (M + S1 + S2 + S3 > M),однако это поведение может быть заменено и EDSG сервис будет ограничивать трафик согласно конфигурации, однако общий трафик абонента не выйдет на пределы абонентской сессии. (M + S1 + S2 + S3 <= M)
+Так же, по умолчанию ограничение по скорости EDSG сервиса добавляется к ограничению по скорости мастер сессии (M + S1 + S2 + S3 > M),однако это поведение может быть заменено командой `edsg traffic-mode rate` и EDSG сервис будет ограничивать трафик согласно конфигурации, однако общий трафик абонента не выйдет за пределы ограничения на мастер сессии. (M + S1 + S2 + S3 <= M)
 
-### Отличие от Cisco ISG
+#### Отличие от Cisco ISG
 
 Классификация трафика и применение политик, сервисов осуществляется на основе user-group и service-group, а не по Source IP, поэтому при использовании разных VPN соблюдать не пересекающиеся адресные пространства на доступе не обязательно.
 
-Чтобы поменять сервис уже аутентифицированному пользователю достаточно через CoA поменять ему user-group и/или service-group или домен.
+**Чтобы поменять сервис уже аутентифицированному пользователю достаточно через CoA поменять ему user-group и/или service-group или домен.**
 
 ### Понятие АCL
 
@@ -77,7 +79,7 @@ ACL-access control list используются для идентификаци
 ### Трафиковые политики
 
 Traffic policy это политика QoS сформированная путем ассоциации классификатора трафика (classifier) и действия (behavior) применяемого к этому трафику. Traffic policy может быть применена на интерфейс, на устройство глобально или к отдельному абонентскому сервису.
-BNG поддерживает динамическое изменение правил политики трафика, но не поддерживает динамического изменения типа политики Shared/Non-shared. При изменении ACL в политике новые правила вступают в действия сразу.
+BNG поддерживает динамическое изменение правил политики трафика, но не поддерживает динамического изменения типа политики Shared/Non-shared. При изменении ACL задействованных в политике новые правила вступают в действия сразу.
 
 ### Group Identifier
 
@@ -93,18 +95,18 @@ Group Identifier (GID - Идентификатор группы) это сопо
 
 Service Group Identifier похож на User-group identifier, однако precedence в трафиковых политиках не имеет значение при указании Priority при аутентификации Service на Radius сервере.
 
-### Shaping vs Policing
+### Shaping(user-queue) vs Policing (car)
 
 По умолчанию Huawei BNG делает shaping в downstream (что хорошо для TCP) и policing (что нормально) в upstream направлении.
-Поведение по умолчанию можно поменять как для user-group, так и для service-group.
+Поведение по умолчанию можно поменять как для user-group `rate-limit-mode { car | user-queue } outbound`, так и для service-group `service rate-limit-mode { car | user-queue } { inbound | outbound }`.
 
 Если на BNG установлен FPIC c eTM чипом, то downstream traffic shaping и другие операции с абонентским трафиком обычно выполняемые на TM чипе основной платы (LPU) выполняются на eTM чипе FPIC. Данное поведение можно отключить (но зачем?)
 
 ### Домен
 
-Домен является аггрегирующей сущностью, шаблонов с параметрами по умолчанию. В домене так же определяются некоторые параметры NAT, порядок обработки правил на основе user-group/service-group, а так же тип )policing/shaping) ограничения полосы пропускания в разных направлениях (upstream/downstream)
+Домен является агрегирующей сущностью, шаблоном со значениями некоторых атрибутов по умолчанию. В домене так же определяются некоторые параметры NAT, порядок обработки правил на основе user-group/service-group, а так же тип (policing/shaping) ограничения полосы пропускания в разных направлениях (upstream/downstream)
 
-Каждый домен может содержать следующие параметры:
+Каждый домен может содержать следующие параметры (далеко не полный список)
 
 1. Имя IPv4 pool/IPv4 pool group
 2. Имя IPv6 Pool
@@ -118,7 +120,9 @@ Service Group Identifier похож на User-group identifier, однако pre
 10. Метод подсчёта трафика для IPv4 и IPv6
 11. Метод распределения bandwidth между основной мастер сессией и сервисами EDSG.
 
-Параметры схемы аутентификации, схемы аккаунтинга, Radius server group необходимо указывать в настройках домена, остальные параметры специфичные для абонентской сессии могут быть переданы с RADIUS сервера.
+Параметры схемы аутентификации, схемы аккаунтинга, Radius server group необходимо указывать в настройках домена, остальные параметры специфичные для абонентской сессии могут быть переданы с RADIUS сервера в стандартных или проприетарных RADIUS атрибутах.
+
+**Значения атрибутов переданных с RADIUS всегда приоритетнее таких же настроенных локально в домене.**
 
 ### BAS интерфейс
 
@@ -127,11 +131,11 @@ Service Group Identifier похож на User-group identifier, однако pre
 ### Типы BAS интерфейсов и абонентских сессий
 
 1. layer2-subscriber - VLAN, QnQ терминируется на BNG. Инициатором сессии как правило выступает DHCP Discover/ND сообщение, однако возможны варианты старта сессии по IP/ARP пакетам. BNG может выступать в качестве DHCP relay, proxy, server
-1. layer3-subscriber - VLAN, QnQ терминируются на сети доступа, аггрегации и на BNG приходит смаршрутизированный трафик. BNG может выступать в качестве DHCP server. Инициация сессии по IP пакету
-1. layer2-leased-line - VLAN, QnQ терминируется на BNG. Инициатором сессии как правило выступает DHCP Discover/ND сообщение, однако ограничение скорости и аккаунтинг трафика делается для всего интерфейса.
-1. layer3-leased-line - VLAN, QnQ терминируются на сети доступа, аггрегации и на BNG приходит смаршрутизированный трафик. BNG может выступать в качестве DHCP server, relay. Аутентификация сессии происходит по логину/паролю настроенному на саб-интерфейсе во время его перехода в состояние Operational UP. Может оказываться как сервис Интернет так и сервис доступ в MPLS L3VPN.
+1. layer3-subscriber - VLAN, QnQ терминируются на сети доступа, агрегации и на BNG приходит смаршрутизированный трафик. BNG может выступать в качестве DHCP server. Инициация сессии по IP пакету, Source IP при этом может являться частью username.
+1. layer2-leased-line - VLAN, QnQ терминируется на BNG. Инициатором сессии как правило выступает DHCP Discover/ND сообщение, однако ограничение скорости и аккаунтинг трафика делается для всего интерфейса. Логин/пароль настраиваются локально на интерфейсе.
+1. layer3-leased-line - VLAN, QnQ терминируются на сети доступа, агрегации и на BNG приходит смаршрутизированный трафик. BNG может выступать в качестве DHCP server, relay. Аутентификация сессии происходит по логину/паролю настроенному на сабинтерфейсе во время его перехода в состояние Operational UP. Может оказываться как сервис Интернет так и сервис доступ в MPLS L3VPN.
 1. l2vpn-leased-line - VLAN, QnQ терминируется на BNG. Инициатором сессии выступает переход интерфейса в состоянии Operational UP, а аутентификация происходит по логину/паролю настроенному на сабинтерфейсе. При успешной аутентификации интерфейс включается L2VPN (VLL/VPLS) абонента.
-1. Static User - особый тип юзеров, при котором аутентификация с RADIUS не нужна и абонент не обязан генерировать какой либо трафик чтобы сессия поднялась. Может быть использован для банкоматов или других специфичных кейсов.
+1. Static User - особый тип абонентов, при котором аутентификация с RADIUS не нужна и абонент не обязан генерировать какой либо трафик чтобы сессия поднялась. Может быть использован для банкоматов или других специфичных кейсов.
 
 ### Методы аутентификации
 
@@ -148,22 +152,21 @@ Service Group Identifier похож на User-group identifier, однако pre
 
 ### Возможные топологии
 
-1. Терминирование VLL (EoMPLS, xconnect) на логическом интерфейсе BNG – Virtual-Ethernet с типом интерфейса l2-terminate и терминирование BNG абонентов на другом Virtual-Ethernet с типом интерфейса l3-access, на нем настраивается параметры BAS интерфейса. Оба интерфейса объединяются в одну VE группу, чтобы осуществить переход от L2VPN в L3VPN логически внутри оборудования. Возможен маппинг N к 1, таким образом N l2-terminate могут быть стерминированы на одном l3-terminate BAS интерфейсе. BNG выступает в качестве PE как для сети MAN, так и для IPBB сети оператора.
-2. Терминирование абонентов на интерфейсе LAG участники которого распределены между несколькими линейными платами. Абоненты логически терминируется на сабинтерфейсах данной LAG. VLL используется для передачи трафика от удаленного OLT к PE, которому непосредственно подключен BNG. Различные VLAN id определяют тот или иной VLL приходящий на PE роутер перед BNG. BNG выступает в роли CE для MAN сети и в роли PE для IPBB сети.
+1. Терминирование VLL/VPLS (EoMPLS, xconnect) на логическом интерфейсе BNG – Virtual-Ethernet с типом интерфейса l2-terminate и терминирование BNG абонентов на другом Virtual-Ethernet с типом интерфейса l3-access, на нем настраивается параметры BAS интерфейса. Оба интерфейса объединяются в одну VE группу, чтобы осуществить переход от L2VPN в L3VPN логически внутри оборудования. Возможен маппинг N к 1, таким образом N l2-terminate могут быть стерминированы на одном l3-terminate BAS интерфейсе. BNG выступает в качестве PE как для сети MAN, так и для IPBB сети оператора.
+2. Терминирование абонентов на интерфейсе LAG участники которого могут быть распределены между несколькими линейными платами. Абоненты логически терминируется на сабинтерфейсах данной LAG. VLL используется для передачи трафика от удаленного OLT к PE, к которому непосредственно подключен BNG. Различные VLAN id определяют тот или иной VLL приходящий на PE роутер перед BNG. BNG выступает в роли CE для MAN сети и в роли PE для IPBB сети.
 3. Терминирование абонентов на интерфейсе LAG участники которого распределены между несколькими линейными платами. Абоненты логически терминируется на сабинтерфейсах данной LAG. У BNG нет связности по IP/MPLS с сетью IPBB, он фактически располагается между двух IP/MPLS сетей, выступая в роли CE как для MAN сети, так и для IPBB. Сабинтерфейсы интерфейса LAG с различными VLAN служат как для терминирования абонентов, так и для связи с IPBB сетью и сетью Интернет соответственно.
 
 ### Использование ресурсов BNG
 
-Стоит отметить что использование LAG для терминации абонентов допустимо только если интерфейсы LAG находятся на одной LPU и обрабатываются одним и тем же NP/TM чипом, в противном случае будет тратится в X раз больше ресурсов, где X - количество NP/TM чипов задействованных в LAG.
+Стоит отметить что использование LAG для терминации абонентов не потребляет лишних ресурсов только если интерфейсы LAG находятся на одной LPU и обрабатываются одним и тем же NP/TM чипом, в противном случае будет тратится в X раз больше ресурсов, где X - количество NP/TM чипов задействованных в LAG.
 
-Кроме это абонентская лицензия так же могут быть использованы Z раз по числу LPU в LAG.
+Кроме этого абонентские лицензии на количество subscriber так же используются в Z раз больше по числу LPU в LAG.
 
-При использовании PWHT тратятся ресурсы того слота и сабслота, который выбран на Virtual-Ethernet интерфейсе,
-например 1/0/Y говорит о том что используются ресурсы Slot 1, FPIC (sub-slot) 0.
+При использовании PWHT тратятся ресурсы того слота и сабслота, который выбран на Virtual-Ethernet интерфейсе, например 1/0/Y говорит о том что используются ресурсы Slot 1, FPIC (sub-slot) 0.
 
 ### Примерная конфигурация layer2-subscriber и BIND на Eth-trunk интерфейсе(2)
 
-#### Создание user-group и service-group
+#### Создание user-group и service-group локально
 
 ``` huawei_cli
 #
@@ -179,9 +182,15 @@ Service Group Identifier похож на User-group identifier, однако pre
 #
 ```
 
+#### Создание time-range (в данном примере не используются, но могут быть использование в UCL)
+
+``` huawei_cli
+time-range tr_night 01:0 to 8:00 daily
+```
+
 #### Создание Radius групп для аутентификации абонентов и сервисов
 
-Можно использовать как один и тот же так и два разных радиуса для аутентификации абонентов и сервисов
+Можно использовать как одну и ту же так и две разных RADIUS группы для аутентификации абонентов и сервисов
 
 ``` huawei_cli
 #
@@ -205,7 +214,7 @@ radius-server authorization X.X.X.X shared-key-cipher server-group coa-source
 
 #### Создание UCL для user-group и service-group
 
-##### UCL для user-group
+##### UCL для user-group и EDSG
 
 ``` huawei_cli
 acl name acl-cgn-in number XXXX match-order auto
@@ -222,11 +231,7 @@ rule 35 permit udp source service-group any destination ip-address X.X.X.X 0 des
 rule 40 permit tcp source service-group any destination ip-address X.X.X.X 0 destination-port eq www
 rule 45 permit tcp source service-group any destination ip-address X.X.X.X 0 destination-port eq www
 rule 50 permit tcp source service-group any destination ip-address X.X.X.X 0 destination-port eq 443
-```
 
-##### UCL для EDSG
-
-``` huawei_cli
 acl name acl-opengarden-out number XXX1 match-order auto
  rule 5 permit ip source ip-address X.X.X.X X.X.X.X destination service-group sg-open-garden
 
@@ -241,7 +246,7 @@ acl name acl-world-out number XXX4 match-order auto
 acl name acl-world-in number XXX5 match-order auto
  rule 5 permit ip source service-group sg-world destination ip-address any
 #
-acl name acl-l4-redirect number XXX5 match-order auto
+acl name acl-l4-redirect number XXX6 match-order auto
  rule 5 permit tcp source service-group sg-l4-redirect destination ip-address any destination-port eq www
 rule 10 permit tcp source service-group sg-l4-redirect destination ip-address any destination-port eq 8080
 rule 15 permit tcp source user-group ug-access-reject destination ip-address any destination-port eq www
@@ -282,7 +287,7 @@ traffic behavior tb-l4-redirect
 #
 ```
 
-#### Traffic policy
+#### Traffic policy (состыковываем tc и tb)
 
 ``` huawei_cli
 traffic policy tp-main-in
@@ -301,14 +306,14 @@ traffic policy tp-main-out
  classifier tc-world-out behavior tb-collect-stats
 ```
 
-#### Конфигурация traffic policy глобально к BNG, иначе фунционал BNG работать не будет
+#### Конфигурация traffic policy глобально к BNG, иначе функционал BNG работать не будет
 
 ``` huawei_cli
  traffic-policy tp-main-in inbound
  traffic-policy tp-main-out outbound
 ```
 
-#### IP Pools
+#### IP Pools (можно использовать DHCP relay/proxy тогда конфигурация немного меняется)
 
 ``` huawei_cli
 ip pool public-01-pool bas local
@@ -331,8 +336,8 @@ constant-index X
 
 ``` huawei_cli
 aaa
-default-password template default-ipoe-password cipher derparol
- default-user-name template ipoe-username-template include pevlan :  cevlan
+default-password template default-ipoe-password cipher derparol 
+default-user-name template ipoe-username-template include pevlan :  cevlan \\Определяем формат username и поля которые будут использованы для формирования
 
  authentication-scheme as-dynamic-customers
  authening authen-fail online authen-domain access-reject \\При отказе RADIUS абонент будет перенаправлен в соответствующий домен
@@ -343,7 +348,7 @@ accounting interim interval 5
 
 ```
 
-##### Конфигурация доменов
+##### Конфигурация доменов (Если какие то из необходимых объектов не указаны в домене, то они должны быть переданы при аутентификации сессии)
 
 ``` huawei_cli
 domain main
@@ -354,11 +359,10 @@ ip-pool-group public-01-group
   radius-server group users
  web-server url http://redirect.page.local
  web-server identical-url
-  traffic match user-group inbound
+  traffic match user-group inbound \\включение обработки по user-group после попадания в service-group
   ip-pool mode priority local
-  undo public-address nat enable
+  undo public-address nat enable \\Не делать NAT для публичных адресов
   edsg traffic-mode rate separate statistic together
- service rate-limit-mode user-queue outbound
 
  domain access-reject
 authentication-scheme none
@@ -372,12 +376,11 @@ user-group ug-access-reject
 web-server url http://redirect.page.local
   web-server identical-url
   edsg traffic-mode rate separate statistic together
- service rate-limit-mode user-queue outbound
 ```
 
 Конец AAA секции
 
-#### Указание откуда и с каким паролем вытаскивать EDSG сервисы
+#### Указание откуда и с каким паролем аутентифицировать EDSG сервисы
 
 ``` huawei_cli
 service-policy download local radius services password cipher 123456
@@ -390,7 +393,7 @@ service-policy download local radius services password cipher 123456
 ``` huawei_cli
 interface Eth-Trunk0.1
  description B2B
- user-vlan any-other \\ Любой другой VLAN или QnQ VLANs  явно не указанные на других интерфейсах
+ user-vlan any-other \\ Любой другой VLAN или QnQ VLANs явно не указанные на других интерфейсах. Аналог dynamic clips на E///
   bas
 #
   access-type layer2-subscriber default-domain authentication main \\ указание типа интерфейса и домена по умолчанию в котором будет произведена аутентификация
@@ -458,15 +461,16 @@ bgp 65001
 # 1. Назначение двух сервисов                              #
 ############################################################
 "s_open"  Cleartext-Password:="123456"
-        HW-AVpair = "service:service-group=sg-open-garden",
+        HW-AVpair = "service:service-group=sg-open-garden priority 100",
         HW-AVpair += "service:authentication-scheme=none",
         HW-AVpair += "service:accounting-scheme=acct",
         HW-AVpair += "service:radius-server-group=users",
         HW-Input-Committed-Information-Rate = "2000000",
         HW-Output-Committed-Information-Rate += "2000000"
+        HW-Priority = "60"
 
 "s_inet" Cleartext-Password := "123456"
-        HW-AVpair = "service:service-group=sg-world",
+        HW-AVpair = "service:service-group=sg-world priority 200",
         HW-AVpair += "service:authentication-scheme=none",
         HW-AVpair += "service:accounting-scheme=acct",
         HW-AVpair += "service:radius-server-group=users",
@@ -474,7 +478,7 @@ bgp 65001
         HW-Output-Committed-Information-Rate += "3000000"
 
 "s_2inet" Cleartext-Password := "123456"
-        HW-AVpair = "service:service-group=sg-world",
+        HW-AVpair = "service:service-group=sg-world priority 200",
         HW-AVpair += "service:authentication-scheme=none",
         HW-AVpair += "service:accounting-scheme=acct",
         HW-AVpair += "service:radius-server-group=users",
@@ -482,7 +486,7 @@ bgp 65001
         HW-Output-Committed-Information-Rate += "8000000"
 
 "s_multi" Cleartext-Password := "123456"
-        HW-AVpair = "service:service-group=sg-world",
+        HW-AVpair = "service:service-group=sg-world priority 200",
         HW-AVpair += "service:authentication-scheme=none",
         HW-AVpair += "service:accounting-scheme=acct",
         HW-AVpair += "service:radius-server-group=users",
@@ -490,14 +494,56 @@ bgp 65001
         HW-Output-Committed-Information-Rate += "5000000"
 ```
 
-Абонент с QnQ VLAN s-vlan 1001 c-vlan 2001 и двумя EDSG сервисами.
+Абонент с QnQ VLAN s-vlan 1001 c-vlan 2001 и двумя EDSG сервисами и HW IP Pool группой = public-01-group
 
 ``` raduis_config
 1001:2001@main  Cleartext-Password := "derparol"
         Service-Type = Login-User
         HW-Account-Info = "As_open",
         HW-Account-Info += "As_inet"
+        HW-Framed-Pool-Group = "public-01-group",
 ```
+
+### Huawei AV-Pair для сервисов и не только
+
+Больше информации про HW-AVpair (188) можно найти в [документации](https://support.huawei.com/hedex/hdx.do?lib=EDOC1000144075AEI0605X&docid=EDOC1000144075&lang=en&v=05&tocLib=EDOC1000144075AEI0605X&tocV=05&id=AEI0605X_05_19676&tocURL=resources%252fme60%255fpublic%255fen%252fne%252fdc%255fne%255fcfg%255f013537a%252ehtml&p=t&fe=1&ui=3&keyword=method&keyword=authent&text=Configuring%25252BWeb%25252B%2525253Cb%2525253EAuthentication%2525253C%2525252Fb%2525253E%25252Bor%25252BFast%25252B%2525253Cb%2525253EAuthentication%2525253C%2525252Fb%2525253E)
+
+Huawei RADIUS атрибуты которые могут понадобиться
+
+* HW-Input-Committed-Information-Rate
+* HW-Output-Committed-Information-Rate
+* HW-Input-Committed-Burst-Size
+* HW-Output-Committed-Burst-Size
+* HW-Subscriber-QoS-Profile (для локальных QoS profile)
+* HW-Data-Filter
+* HW-Command-Mode
+* HW-VPN-Instance
+
+AVPair относящиеся к EDSG на которые стоит обратить внимание.
+
+* service:service-group
+* service:authentication-scheme
+* service:accounting-scheme
+* service:radius-server-group
+* service:time-range
+* subscriber:traffic-policy-in
+* subscriber:traffic-policy-out
+
+Для особо отважных рекомендую разобраться в [More Information About HW-Data-Filter (82)](https://support.huawei.com/hedex/hdx.do?lib=EDOC1000144075AEI0605X&docid=EDOC1000144075&lang=en&v=05&tocLib=EDOC1000144075AEI0605X&tocV=05&id=AEI0605X_05_19676&tocURL=resources%252fme60%255fpublic%255fen%252fne%252fdc%255fne%255fcfg%255f013537a%252ehtml&p=t&fe=1&ui=3&keyword=method&keyword=authent&text=Configuring%25252BWeb%25252B%2525253Cb%2525253EAuthentication%2525253C%2525252Fb%2525253E%25252Bor%25252BFast%25252B%2525253Cb%2525253EAuthentication%2525253C%2525252Fb%2525253E) который позволяет передавать динамически UCL на основе service-group, а так же создавать динамически traffic classifier и traffic behaviour.
+
+Для примера следующее содержание  HW-Data-Filter `
+RC=class1;SS-GROUP=google;DIP=1;1.1.0.0/16;DIP=2.2.0.0/16;DIP=3.3.0.0/16;BI-DIR; RB=behavior1@RB=behavior1;permit;` эквиваленто созданию TC = class1, Behavior = behavior1 и UCL c использованием service-group = google приведенного ниже локально на BNG.
+
+``` huawei_cli
+rule permit ip source ip-address 1.1.0.0 0.0.255.255 destination service-group google
+rule permit ip source service-group google destination ip-address 1.1.0.0 0.0.255.255
+rule permit ip source ip-address 2.2.0.0 0.0.255.255 destination service-group google
+rule permit ip source service-group google destination ip-address 2.2.0.0 0.0.255.255
+rule permit ip source ip-address 3.3.0.0 0.0.255.255 destination service-group google
+rule permit ip source service-group google destination ip-address 3.3.0.0 0.0.255.25
+```
+
+**Однако данный метод имеет серьезный недостаток из-за максимального размера сообщения в RADIUS так как RADIUS работает поверх UDP, а имплементировать [RADIUS over TCP](https://tools.ietf.org/html/rfc6613) никто из вендоров BNG особо не желает.**
 
 ### Бонус
 
